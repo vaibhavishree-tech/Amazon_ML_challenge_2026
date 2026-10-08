@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary
 
-Our approach was evidence-first: every design decision — cleaning rules, blocking signals, model features — was derived from a quantitative finding in the data, not assumed upfront. We built a country-partitioned, rarity-weighted blocking stage feeding an XGBoost classifier trained on ten similarity features, with the decision threshold selected through honest, full-candidate-pool evaluation.
+The approach was evidence-first: every design decision — cleaning rules, blocking signals, model features — was derived from a quantitative finding in the data, not assumed upfront. We built a country-partitioned, rarity-weighted blocking stage feeding an XGBoost classifier trained on ten similarity features, with the decision threshold selected through honest, full-candidate-pool evaluation.
 
 A key finding — weaker name-similarity signal for non-Latin-script business names — led us to build and validate a semantic embedding feature, which measurably improved performance (F_0.5 0.8853 vs. 0.8809) but could not be deployed at full scale within available memory and time, so we submitted our validated baseline instead.
 
