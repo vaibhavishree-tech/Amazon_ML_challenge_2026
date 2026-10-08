@@ -2,15 +2,15 @@
 
 ## 1. Executive Summary
 
-The approach was evidence-first: every design decision — cleaning rules, blocking signals, model features — was derived from a quantitative finding in the data, not assumed upfront. We built a country-partitioned, rarity-weighted blocking stage feeding an XGBoost classifier trained on ten similarity features, with the decision threshold selected through honest, full-candidate-pool evaluation.
+The approach was evidence-first: every design decision — cleaning rules, blocking signals, model features — was derived from a quantitative finding in the data, not assumed upfront. I built a country-partitioned, rarity-weighted blocking stage feeding an XGBoost classifier trained on ten similarity features, with the decision threshold selected through honest, full-candidate-pool evaluation.
 
-A key finding — weaker name-similarity signal for non-Latin-script business names — led us to build and validate a semantic embedding feature, which measurably improved performance (F_0.5 0.8853 vs. 0.8809) but could not be deployed at full scale within available memory and time, so we submitted our validated baseline instead.
+A key finding — weaker name-similarity signal for non-Latin-script business names — led us to build and validate a semantic embedding feature, which measurably improved performance (F_0.5 0.8853 vs. 0.8809) but could not be deployed at full scale within available memory and time, so I submitted the validated baseline instead.
 
 ---
 
-## 2. Our Investigation: What the Data Told Us (EDA)
+## 2. Investigation: What the Data Told Me (EDA)
 
-Before writing a single line of matching logic, we audited the dataset end-to-end — volume, integrity, match structure, country composition, text quality, and the actual separability of candidate similarity features. Every decision in the phases that follow traces back to a finding in this section.
+Before writing a single line of matching logic, I audited the dataset end-to-end — volume, integrity, match structure, country composition, text quality, and the actual separability of candidate similarity features. Every decision in the phases that follow traces back to a finding in this section.
 
 ### 2.1 Dataset Scale & Integrity
 
@@ -21,7 +21,7 @@ Before writing a single line of matching logic, we audited the dataset end-to-en
 | Train ground truth (true-match pairs) | 7,638,365 |
 | Test Source 1 | ~1.73M |
 
-We confirmed entity IDs were unique within each source file, ground truth referenced no orphan IDs outside the source files, and business_address was the only field with meaningful missingness (~3.3% in Source 2/3, absent from Source 1). This gave us confidence to build strict, assumption-free lookups in every later phase rather than defensively handling widespread data corruption.
+I confirmed entity IDs were unique within each source file, ground truth referenced no orphan IDs outside the source files, and business_address was the only field with meaningful missingness (~3.3% in Source 2/3, absent from Source 1). This gave me confidence to build strict, assumption-free lookups in every later phase rather than defensively handling widespread data corruption.
 
 ### 2.2 Match Topology — Singletons, Cardinality, Source Splits
 
@@ -38,7 +38,7 @@ Out of 2,206,821 total Source 1 entities in the training ground truth:
 
 The overwhelming majority of Source 1 entities have multiple true matches, not one-to-one correspondences — this told us early that our matching model needed to support predicting *sets* of matches per entity, not a single best match, and that our evaluation methodology needed to handle singletons correctly (a correctly-predicted empty match list scores 1.0, not 0).
 
-Among entities with at least one true match, we also examined which source(s) their matches came from:
+Among entities with at least one true match, I also examined which source(s) their matches came from:
 
 | Source split | Count | % |
 |---|---|---|
@@ -59,14 +59,14 @@ Training data contains only **US** and **India**.
 
 The test set introduces **France**, making up 14.98% of test Source 1 (14.39–14.40% across Source 2/3) — a substantial share, with **zero training examples** to learn from.
 
-This single finding shaped multiple downstream decisions: our blocking and cleaning logic had to generalize to an unseen country rather than hardcoding US/India-specific assumptions, and we knew from the outset that any locally-measured performance estimate would be blind to France's real contribution.
+This single finding shaped multiple downstream decisions: the blocking and cleaning logic had to generalize to an unseen country rather than hardcoding US/India-specific assumptions, and I knew from the outset that any locally-measured performance estimate would be blind to France's real contribution.
 
-We also compared train vs. test distributions by country and found France's text behaves differently from the countries we do have training data for:
+I also compared train vs. test distributions by country and found France's text behaves differently from the countries we do have training data for:
 
 - Average business name length in test France is notably shorter (19.42 chars in Source 1) than US (22.46) or India (26.37), and address length patterns differ too.
 - This reinforced that France couldn't be treated as "just another country" by assumption — it needed to be handled by features general enough to transfer, not patterns tuned specifically to US/India text.
 
-Critically, we also found **0.00% of true-match pairs disagreed on country** (7,638,365 pairs checked, 0 mismatches) — a true match is never split across two different countries.
+Critically, I also found **0.00% of true-match pairs disagreed on country** (7,638,365 pairs checked, 0 mismatches) — a true match is never split across two different countries.
 
 This single fact justified partitioning every later stage (blocking indexes, candidate generation) strictly by country, cutting the comparison space dramatically with zero recall cost.
 
@@ -83,9 +83,9 @@ This single fact justified partitioning every later stage (blocking indexes, can
 | test_source2 | 18.99% | 14.75% |
 | test_source3 | 14.51% | 14.35% |
 
-Source 1 (across train and test) is almost entirely ASCII, while Source 2/3 — the pools we must match *against* — contain non-ASCII text in roughly 11–19% of business names and 9–15% of addresses. This asymmetry meant any name-matching approach relying purely on literal text comparison would systematically fail on a specific, identifiable subset of entities, directly motivating the cleaning pipeline's transliteration handling (Section 3) and, later, our embedding exploration (Section 6).
+Source 1 (across train and test) is almost entirely ASCII, while Source 2/3 — the pools we must match *against* — contain non-ASCII text in roughly 11–19% of business names and 9–15% of addresses. This asymmetry meant any name-matching approach relying purely on literal text comparison would systematically fail on a specific, identifiable subset of entities, directly motivating the cleaning pipeline's transliteration handling (Section 3) and, later, the embedding exploration (Section 6).
 
-**Legal suffix and vocabulary noise**, drawn directly from token-frequency analysis across all sources, confirmed abbreviation/expansion pairs occurring at huge, near-equal scale — e.g. `limited` (3,647,872) vs. `ltd` (2,007,217), `private` (3,345,585) vs. `pvt` (1,117,065), `llc` (2,306,365), `inc` (1,696,402), `corp` (570,620) — each becoming a specific legal-suffix normalization rule in Section 3. We also confirmed `sarl` (358,680) and `sas` (254,297) as distinct, high-frequency French legal-entity tokens, directly tied to France's volume — a signal we deliberately preserved rather than normalizing away.
+**Legal suffix and vocabulary noise**, drawn directly from token-frequency analysis across all sources, confirmed abbreviation/expansion pairs occurring at huge, near-equal scale — e.g. `limited` (3,647,872) vs. `ltd` (2,007,217), `private` (3,345,585) vs. `pvt` (1,117,065), `llc` (2,306,365), `inc` (1,696,402), `corp` (570,620) — each becoming a specific legal-suffix normalization rule in Section 3. We also confirmed `sarl` (358,680) and `sas` (254,297) as distinct, high-frequency French legal-entity tokens, directly tied to France's volume — a signal I deliberately preserved rather than normalizing away.
 
 **Postal code presence** was consistently sparse (4.37–7.33% of addresses across all sources) — too sparse to serve as a primary blocking key, but still a strong confirmatory signal where present, worth extracting as a standalone feature.
 
@@ -93,7 +93,7 @@ Source 1 (across train and test) is almost entirely ASCII, while Source 2/3 — 
 
 ### 2.5 Positive vs. Negative Pair Similarity — Validating Our Future Features
 
-Before committing to any similarity metric as a model feature, we validated that it actually separates true matches from random noise, computed across all six similarity metrics on real ground-truth pairs vs. randomly sampled negative pairs:
+Before committing to any similarity metric as a model feature, I validated that it actually separates true matches from random noise, computed across all six similarity metrics on real ground-truth pairs vs. randomly sampled negative pairs:
 
 | Metric | Positive median | Negative median | Positive p90 | Negative p90 |
 |---|---|---|---|---|
@@ -104,7 +104,7 @@ Before committing to any similarity metric as a model feature, we validated that
 | address_token_jaccard | 0.667 | 0.000 | 1.000 | 0.048 |
 | address_char3gram_jaccard | 0.686 | 0.015 | 0.942 | 0.052 |
 
-Every metric shows a clear, substantial gap between true-match and random-pair distributions — most strikingly, token-based Jaccard similarity on both name and address: true matches cluster at a median of 0.667 overlap, while negative pairs cluster at essentially 0.000. This gave us strong confidence that token-based Jaccard, Levenshtein distance, and character n-gram overlap were genuinely discriminative signals worth building both blocking and matching around, rather than assumed-reasonable metrics we hadn't tested.
+Every metric shows a clear, substantial gap between true-match and random-pair distributions — most strikingly, token-based Jaccard similarity on both name and address: true matches cluster at a median of 0.667 overlap, while negative pairs cluster at essentially 0.000. This gave me strong confidence that token-based Jaccard, Levenshtein distance, and character n-gram overlap were genuinely discriminative signals worth building both blocking and matching around, rather than assumed-reasonable metrics we hadn't tested.
 
 ### 2.6 What This Meant for the Rest of the Pipeline
 
@@ -147,11 +147,11 @@ Two ordering decisions mattered most:
 | Placeholder neutralization ("NA", "null") | Literal placeholder text found in manual review |
 | Street-type / state abbreviation expansion | Mixed `mh`/`maharashtra`, `tx`/`texas` inconsistency |
 
-**One deliberate exception**: we did *not* normalize `sarl` or `sas`. These are distinct French legal-entity markers. Collapsing them into an English equivalent would destroy a real, country-specific signal.
+**One deliberate exception**: I did *not* normalize `sarl` or `sas`. These are distinct French legal-entity markers. Collapsing them into an English equivalent would destroy a real, country-specific signal.
 
 ### 3.2 Validating the Cleaning Pipeline
 
-We measured the pipeline against EDA's pre-cleaning numbers — not assumed it worked.
+I measured the pipeline against EDA's pre-cleaning numbers — not assumed it worked.
 
 **Row integrity**: All six files kept their exact original row counts. No rows dropped or duplicated.
 
@@ -219,7 +219,7 @@ This directly shaped two blocking decisions:
 
 Country partitioning was not optional — Section 2.3 showed **0.00% of true matches cross country lines**. Restricting all comparisons to within-country pairs loses zero recall while cutting the search space dramatically.
 
-Within each country partition, we build inverted indexes over Source 2/3, then query them per Source 1 entity to generate a candidate pool.
+Within each country partition, I build inverted indexes over Source 2/3, then query them per Source 1 entity to generate a candidate pool.
 
 ### 4.2 Blocking Signals Used
 
@@ -294,7 +294,7 @@ Three concrete inputs carried into the matching phase:
 
 1. **A 92.76% recall ceiling** — the real target for our model is maximizing precision/F_0.5 *within* this ceiling, not an unreachable 100%.
 2. **~500 candidates per entity on average** — the matching model needs to be fast and cheap per pair, since it scores at this volume.
-3. **A confirmed, propagating non-ASCII gap** — motivating a feature that doesn't rely on name tokens alone (Section 6), and informing how we'd interpret matching-stage errors later (Section 7).
+3. **A confirmed, propagating non-ASCII gap** — motivating a feature that doesn't rely on name tokens alone (Section 6), and informing how I'd interpret matching-stage errors later (Section 7).
 
 ---
 
@@ -304,7 +304,7 @@ Three concrete inputs carried into the matching phase:
 
 Blocking narrows the field. Matching decides, pair by pair, whether a candidate is a true match.
 
-We used **10 features**, each one validated in Section 2.5 or motivated by a specific earlier finding — nothing added on assumption alone.
+I used **10 features**, each one validated in Section 2.5 or motivated by a specific earlier finding — nothing added on assumption alone.
 
 | Feature | What it captures |
 |---|---|
@@ -362,7 +362,7 @@ The last feature is a direct response to Section 3.3 and 4.5: rather than hoping
 
 **Address dominates.** Address-based features hold 3 of the top 5 positions, and `address_token_jaccard` alone outweighs the next-highest feature by more than 3.6x. This is consistent with Section 4.5's finding that name-based signals are measurably weaker for a meaningful subset of entities, while address remains reliable across the board — the model appears to have learned to lean on the signal that was actually trustworthy.
 
-**One honest nuance**: `matched_side_was_non_ascii` — the flag we added specifically to help the model compensate for the transliteration gap (Section 3.3, 4.5) — ranks 9th out of 10, near the bottom. This suggests the model found the stronger address-based features sufficient to handle non-ASCII cases on their own, relying less on the explicit flag than we anticipated when designing it.
+**One honest nuance**: `matched_side_was_non_ascii` — the flag I added specifically to help the model compensate for the transliteration gap (Section 3.3, 4.5) — ranks 9th out of 10, near the bottom. This suggests the model found the stronger address-based features sufficient to handle non-ASCII cases on their own, relying less on the explicit flag than we anticipated when designing it.
 
 ### 5.3 Threshold Selection Methodology
 
